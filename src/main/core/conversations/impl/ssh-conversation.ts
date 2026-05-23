@@ -3,6 +3,7 @@ import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service'
 import type { ConversationProvider } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
+import { isUnexpectedPtyExit } from '@main/core/pty/exit-classification';
 import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
@@ -152,9 +153,10 @@ export class SshConversationProvider implements ConversationProvider {
       conversationId: conversation.id,
     });
 
-    pty.onExit(({ exitCode }) => {
+    pty.onExit(({ exitCode, signal }) => {
       ptySessionRegistry.unregister(sessionId);
-      const shouldRespawn = this.sessions.has(sessionId);
+      const shouldRespawn =
+        this.sessions.has(sessionId) && isUnexpectedPtyExit({ exitCode, signal });
       this.sessions.delete(sessionId);
       events.emit(agentSessionExitedChannel, {
         sessionId,
@@ -167,7 +169,7 @@ export class SshConversationProvider implements ConversationProvider {
         const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
         this.respawnCounts.set(sessionId, count);
 
-        if (count > MAX_RESPAWNS && !isResuming) {
+        if (count > MAX_RESPAWNS) {
           log.error('SshConversationProvider: respawn limit reached, giving up', {
             conversationId: conversation.id,
           });
@@ -175,11 +177,8 @@ export class SshConversationProvider implements ConversationProvider {
           return;
         }
 
-        const resumeNext = isResuming && count <= MAX_RESPAWNS;
-        if (count > MAX_RESPAWNS) this.respawnCounts.set(sessionId, 0);
-
         setTimeout(() => {
-          this.startSession(conversation, initialSize, resumeNext, initialPrompt).catch((e) => {
+          this.startSession(conversation, initialSize, false, initialPrompt).catch((e) => {
             log.error('SshConversationProvider: respawn failed', {
               conversationId: conversation.id,
               error: String(e),

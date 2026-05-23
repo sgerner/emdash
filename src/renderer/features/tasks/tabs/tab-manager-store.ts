@@ -387,12 +387,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     if (existing) {
       existing.isPreview = false;
       this.activeTabId = existing.tabId;
+      void this._getConversations()?.startSession(conversationId);
       return;
     }
     const entry = new ConversationTabEntry(conversationId, false);
     this.entries.set(entry.tabId, entry);
     addTabId(this, entry.tabId);
     this.activeTabId = entry.tabId;
+    void this._getConversations()?.startSession(conversationId);
   }
 
   openConversationPreview(conversationId: string): void {
@@ -400,6 +402,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     if (existing) {
       // Already open (stable or preview) — just activate; never demote stable → preview.
       this.activeTabId = existing.tabId;
+      void this._getConversations()?.startSession(conversationId);
       return;
     }
     const previewEntry = this._findConversationPreviewEntry();
@@ -407,12 +410,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       // Replace in-place: mutate conversationId so the same tabId and slot are reused.
       previewEntry.conversationId = conversationId;
       this.activeTabId = previewEntry.tabId;
+      void this._getConversations()?.startSession(conversationId);
       return;
     }
     const entry = new ConversationTabEntry(conversationId, true);
     this.entries.set(entry.tabId, entry);
     addTabId(this, entry.tabId);
     this.activeTabId = entry.tabId;
+    void this._getConversations()?.startSession(conversationId);
   }
 
   // ---------------------------------------------------------------------------
@@ -629,6 +634,10 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
 
   hasConversationTab(conversationId: string): boolean {
     return this._findConversationEntry(conversationId) !== undefined;
+  }
+
+  get previewConversationId(): string | undefined {
+    return this._findConversationPreviewEntry()?.conversationId;
   }
 
   // ---------------------------------------------------------------------------
